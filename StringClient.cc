@@ -1,5 +1,7 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <cstring>
 #include <unistd.h>
@@ -9,15 +11,63 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <errno.h>
+#include <pthread.h>
 #include "StringClient.h"
+#include "StringServer.h"
+#include "Message.h"
 
 using namespace std;
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+StringClient *client;
+
+
+// function performed by thread handling user input
+void *UserInput(void *args) {
+
+    string line, reply; // input
+
+    while(getline(cin, line)) {
+
+        // add to the list of data we need to send to server
+        pthread_mutex_lock(&mutex);
+        client->enqueueMessage(line);
+        pthread_mutex_unlock(&mutex);
+
+    } // while
+} // UserInput
+
+// function performed by thread handling backend (req/reply from/to server)
+void *ServerInteraction(void *socket) { 
+
+    string msg, reply;
+    int socketd = (int)*((int*)socket);
+
+    while (1) {
+        while (client->queueCount() > 0) {
+
+            // send client message in queue
+            msg = client->nextMessage();
+
+            pthread_mutex_lock(&mutex);
+            client->dequeueMessage();
+            pthread_mutex_unlock(&mutex);
+
+            client->sendMessage(socketd, (char*)msg.c_str());
+            reply = client->readMessage(socketd);
+
+            cout << "Server: " << reply << endl;
+
+            sleep(2); // 2 second delay between successive requests
+        } // while
+    } // while
+} // ServerInteraction
+
+
 int main(int argc, char *argv[]) {
 
-    int socketd, port, amount;
+    int socketd, port;
     struct hostent *server;
-    StringClient *client;
 
     // create socket
     socketd = socket(AF_INET, SOCK_STREAM, 0);
@@ -28,15 +78,12 @@ int main(int argc, char *argv[]) {
     }
 
     if (getenv("SERVER_ADDRESS") == NULL || getenv("SERVER_PORT") == NULL) {
-      cerr << "Please ensure SERVER_ADDRESS and SERVER_PORT environment variables are set" << endl;
-      exit(1);
+        cerr << "Please ensure SERVER_ADDRESS and SERVER_PORT environment variables are set" << endl;
+        exit(1);
     }
 
     string host_name = getenv("SERVER_ADDRESS");
     port = atoi(getenv("SERVER_PORT")); 
-
-    cout << "SERVER_ADDRESS=" << host_name << endl;
-    cout << "SERVER_PORT=" << port << endl;
 
     server = gethostbyname(host_name.c_str());
 
@@ -45,22 +92,35 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
+    // establish client and connection
     client = new StringClient(server, port);
     client->connectOrDie(socketd);
 
     // connected!
 
-    string line;
-    while(getline(cin, line)){
-    
-    } // while
+    pthread_t stdin_thread, backend_thread;
+
+    // create stdin_thread to handle user input
+    if (pthread_create(&stdin_thread, NULL, UserInput, NULL)){
+        cerr << "ERROR creating thread to handle user input" << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    // create backend_thread to handle request sending to server
+    if (pthread_create(&backend_thread, NULL, ServerInteraction, (void *)&socketd)){
+        cerr << "ERROR creating thread to handle backend" << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    pthread_exit(NULL);
+    pthread_mutex_destroy(&mutex);
 } // main
 
-StringClient::StringClient(hostent *server, int port) : server(server), port(port) {
+StringClient::StringClient(hostent *server, int port) : port(port) {
 
     memset(&(this->serv_addr), 0, sizeof(this->serv_addr));
     this->serv_addr.sin_family = AF_INET;
-    memcpy(&this->serv_addr.sin_addr.s_addr, this->server->h_addr, this->server->h_length);
+    memcpy(&this->serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
     this->serv_addr.sin_port = htons(this->port);
 } // constructor
 
@@ -72,6 +132,66 @@ void StringClient::connectOrDie(int socketd){
     }
 } // connectOrDie
 
-int StringClient::sendMessage(int socketd, string message){
-    return write(socketd, &message, sizeof(message));
+
+/**
+ * Send a message to the server through socket identified by socketd
+ */
+void StringClient::sendMessage(int socketd, char* client_msg){
+
+    // calculate various length values
+    int string_length = strlen(client_msg) + 1;
+    char string_length_char[4];
+    sprintf(string_length_char, "%d", string_length);
+
+    int msg_size = 4 + string_length; // integer(4 bytes)+ text length, note that no space between
+
+
+    // prepare messsage (text length followed by text)
+    char *msg = new char[msg_size]();
+    strncpy(msg, string_length_char, 4);
+    strcpy(msg + 4, client_msg);
+
+    // sending the message
+    if (write(socketd, msg, msg_size) < 0) {
+        cerr << "ERROR writing to socket " << socketd << ": " << strerror(errno) << endl;
+    }
+
+    delete msg;
+} // sendMessage
+
+
+/**
+ * Get message/reply from server through socket identified by socketd
+ * TODO
+ */
+string StringClient::readMessage(int socketd) {
+    char msg[StringServer::MSG_SIZE];
+    stringstream ss;
+    memset(msg, 0, sizeof(msg));
+
+    if (read(socketd, msg, sizeof(msg)) < 0 ) {
+        cerr << "ERROR reading from socket " << socketd << ": " << strerror(errno) << endl;
+    } // if
+
+    for (unsigned int i = 0; i < strlen(msg); i++ ) ss << msg[i];
+
+    return ss.str();
+} // getMessage
+
+
+void StringClient::enqueueMessage(string msg) {
+    this->outgoingMessages.push_back(msg);
+}
+
+
+string StringClient::nextMessage(){
+  return this->outgoingMessages.front();
+}
+
+void StringClient::dequeueMessage(){
+    this->outgoingMessages.pop_front();
+}
+
+int StringClient::queueCount() {
+    return this->outgoingMessages.size();
 }

@@ -18,7 +18,7 @@ EXECS = ${EXEC1} ${EXEC2}					# all executables
 
 all : ${EXECS}	
 ${EXEC1} : ${OBJECTS1}						# link step 1st executable
-	${CXX} ${CXXFLAGS} $^ -o $@
+	${CXX} ${CXXFLAGS} $^ -o $@ -lpthread
 
 
 ${EXEC2} : ${OBJECTS2}

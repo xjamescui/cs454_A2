@@ -2,31 +2,84 @@
 #include <iostream>
 #include <unistd.h>
 #include <cstdlib>
-#include <string.h>
+#include <string>
+#include <sstream>
+#include <cstring>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <errno.h>
+#include "StringServer.h"
+#include "Message.h"
 using namespace std;
+
+/**
+ * Read a message from a client
+ */
+string readMessage(int client_socketd) {
+    char text_size_str[4]; // first 4 bytes
+    unsigned int text_size;
+
+    // read text size (first 4 bytes)
+    if (read(client_socketd, &text_size_str, 4) < 0) {
+        cerr << "ERROR reading from client " << client_socketd << ": " << strerror(errno) << endl;
+        return ""; // TODO handle
+    }
+
+    text_size = strtol(text_size_str, NULL, 10);
+
+    stringstream ss; // to produe final result as a string
+    char text[text_size];
+    memset(text, 0, sizeof(text));
+
+    // read the text
+    if (read(client_socketd, &text, sizeof(text)) < 0) {
+        cerr << "ERROR reading from client " << client_socketd << ": " << strerror(errno) << endl;
+        return ""; // TODO handle
+    }
+
+    for (unsigned int i = 0; i < text_size; i++) ss << text[i];
+
+    cout << "Received from client " << client_socketd << ": " << ss.str() << endl;
+    return ss.str();
+
+} // readMessage
+
+void sendMessage(int client_socketd, const char* msg) {
+    if (write(client_socketd, msg, strlen(msg)) < 0) {
+        cerr << "ERROR writing to client socket " << client_socketd << ": " << strerror(errno) << endl;
+    }
+} // sendMessage
+
+void titleCase(string &str) {
+    bool titleCasedWord = false; // whether or not a word in the string has been title cased
+
+    // Convert everything to lower case to begin
+    for (unsigned int i = 0; i < str.length(); i++) str[i] = tolower(str[i]);
+
+    for (unsigned int i = 0; i < str.length(); i++) {
+
+        if (!isalpha(str[i])) {
+            titleCasedWord = false;
+            continue;
+        }
+
+        if (titleCasedWord == false && isalpha(str[i])) {
+            str[i] = toupper(str[i]);
+            titleCasedWord = true;
+        }
+    }
+} // titleCase
 
 /**
  * String server and client interaction
  */
 void process_client (int client_socketd) {
 
-    int amount; // amount of work doen during read/write
+    string msg = readMessage(client_socketd);
+    titleCase(msg);
+    sendMessage(client_socketd, msg.c_str());
 
-    // read client message
-
-
-    // reply to client
-    amount = write(client_socketd, "Hello client", 18);
-
-    if (amount < 0){
-        // write is not successful
-        cerr << "ERROR when writing to client socket" << endl;
-        exit(1);
-    }
 } // process_client
 
 int getPort(int socketd, struct sockaddr_in server_addr) {
@@ -48,8 +101,7 @@ string getHostname(){
 
 int main(int argc, char *argv[] ){
 
-    int socketd, client_socketd; // socket descriptor
-    int pid;  // used for handing multiple clients using multi-threading later
+    int socketd, client_socketd; // socket descriptors
     struct sockaddr_in server_addr; // address of the server
     struct sockaddr_in client_addr; // address of the connected client
     unsigned int client_addr_len;
@@ -82,6 +134,7 @@ int main(int argc, char *argv[] ){
     cout << "SERVER_PORT " << getPort(socketd, server_addr) << endl; 
 
     client_addr_len = sizeof(client_addr);
+
     // keep server as an ongoing running service
     while (1) {
 
@@ -93,14 +146,14 @@ int main(int argc, char *argv[] ){
         }
 
         cout << client_socketd << " has connected" << endl;
-        pid = fork();
-        if(pid < 0) {
-            exit(1);
-        }
+        /* pid = fork(); */
+        /* if(pid < 0) { */
+        /*     exit(1); */
+        /* } */
 
-        if (pid == 0) {
-            process_client(client_socketd);
-        }
+        /* if (pid == 0) { */
+        process_client(client_socketd);
+        /* } */
 
     } // while
 } // main
