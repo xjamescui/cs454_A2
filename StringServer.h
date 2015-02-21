@@ -1,9 +1,13 @@
 class StringServer {
-    public:
-        StringServer();
-        const static int MSG_SIZE = 256;
+    private:
+        int server_socketd;
+        struct sockaddr_in server_addr;
 
-        void sendMessage(int client_socketd, char* message);
+    public:
+        StringServer(int server_socketd, struct sockaddr_in server_addr) : server_socketd(server_socketd), server_addr(server_addr){};
+
+        void connectOrDie();
+        void sendMessage(int client_socketd, char* response_msg);
         std::string readMessage(int client_socketd);
 
 };

@@ -6,23 +6,23 @@
 #include <cstring>
 #include <unistd.h>
 #include <cstdlib>
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <errno.h>
 #include <pthread.h>
 #include "StringClient.h"
-#include "StringServer.h"
-#include "Message.h"
 
 using namespace std;
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-StringClient *client;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // used for mutex purposes on threads
+StringClient *client; // the client
 
 
-// function performed by thread handling user input
+/**
+ * function performed by thread handling user input
+ */
 void *UserInput(void *args) {
 
     string line, reply; // input
@@ -37,8 +37,13 @@ void *UserInput(void *args) {
     } // while
 } // UserInput
 
-// function performed by thread handling backend (req/reply from/to server)
-void *ServerInteraction(void *socket) { 
+
+
+
+/**
+ * function performed by thread handling backend (req/reply from/to server)
+ */
+void *ServerInteraction(void *socket) {
 
     string msg, reply;
     int socketd = (int)*((int*)socket);
@@ -64,6 +69,7 @@ void *ServerInteraction(void *socket) {
 } // ServerInteraction
 
 
+
 int main(int argc, char *argv[]) {
 
     int socketd, port;
@@ -72,7 +78,7 @@ int main(int argc, char *argv[]) {
     // create socket
     socketd = socket(AF_INET, SOCK_STREAM, 0);
 
-    if (socketd < 0){
+    if (socketd < 0) {
         cerr << "ERROR creating a socket on client side, socket is " << socketd << endl;
         exit(1);
     }
@@ -83,7 +89,7 @@ int main(int argc, char *argv[]) {
     }
 
     string host_name = getenv("SERVER_ADDRESS");
-    port = atoi(getenv("SERVER_PORT")); 
+    port = atoi(getenv("SERVER_PORT"));
 
     server = gethostbyname(host_name.c_str());
 
@@ -101,13 +107,13 @@ int main(int argc, char *argv[]) {
     pthread_t stdin_thread, backend_thread;
 
     // create stdin_thread to handle user input
-    if (pthread_create(&stdin_thread, NULL, UserInput, NULL)){
+    if (pthread_create(&stdin_thread, NULL, UserInput, NULL)) {
         cerr << "ERROR creating thread to handle user input" << endl;
         exit(EXIT_FAILURE);
     }
 
     // create backend_thread to handle request sending to server
-    if (pthread_create(&backend_thread, NULL, ServerInteraction, (void *)&socketd)){
+    if (pthread_create(&backend_thread, NULL, ServerInteraction, (void *)&socketd)) {
         cerr << "ERROR creating thread to handle backend" << endl;
         exit(EXIT_FAILURE);
     }
@@ -115,6 +121,9 @@ int main(int argc, char *argv[]) {
     pthread_exit(NULL);
     pthread_mutex_destroy(&mutex);
 } // main
+
+
+
 
 StringClient::StringClient(hostent *server, int port) : port(port) {
 
@@ -125,7 +134,9 @@ StringClient::StringClient(hostent *server, int port) : port(port) {
 } // constructor
 
 
-void StringClient::connectOrDie(int socketd){
+
+
+void StringClient::connectOrDie(int socketd) {
     if(connect(socketd, (struct sockaddr*)&(this->serv_addr), sizeof(this->serv_addr)) < 0 ) {
         cerr << "ERROR connecting to socket=" << socketd << " : " << strerror(errno) << endl;
         exit(1);
@@ -133,10 +144,11 @@ void StringClient::connectOrDie(int socketd){
 } // connectOrDie
 
 
+
 /**
  * Send a message to the server through socket identified by socketd
  */
-void StringClient::sendMessage(int socketd, char* client_msg){
+void StringClient::sendMessage(int socketd, char* client_msg) {
 
     // calculate various length values
     int string_length = strlen(client_msg) + 1;
@@ -160,23 +172,36 @@ void StringClient::sendMessage(int socketd, char* client_msg){
 } // sendMessage
 
 
+
 /**
  * Get message/reply from server through socket identified by socketd
- * TODO
  */
 string StringClient::readMessage(int socketd) {
-    char msg[StringServer::MSG_SIZE];
-    stringstream ss;
-    memset(msg, 0, sizeof(msg));
+    char text_size_str[4]; // first 4 bytes
+    unsigned int text_size;
+    stringstream ss; // to produe final result as a string
 
-    if (read(socketd, msg, sizeof(msg)) < 0 ) {
+    // read text size (first 4 bytes)
+    if (read(socketd, &text_size_str, 4) < 0) {
+        cerr << "ERROR reading from server socket" << socketd << ": " << strerror(errno) << endl;
+        return ""; // TODO handle
+    }
+
+    text_size = strtol(text_size_str, NULL, 10);
+    char text[text_size];
+    memset(text, 0, sizeof(text));
+
+    if (read(socketd, &text, sizeof(text)) < 0 ) {
         cerr << "ERROR reading from socket " << socketd << ": " << strerror(errno) << endl;
+        return ""; // TODO handle
     } // if
 
-    for (unsigned int i = 0; i < strlen(msg); i++ ) ss << msg[i];
+    for (unsigned int i = 0; i < text_size; i++) ss << text[i];
 
     return ss.str();
 } // getMessage
+
+
 
 
 void StringClient::enqueueMessage(string msg) {
@@ -184,11 +209,11 @@ void StringClient::enqueueMessage(string msg) {
 }
 
 
-string StringClient::nextMessage(){
-  return this->outgoingMessages.front();
+string StringClient::nextMessage() {
+    return this->outgoingMessages.front();
 }
 
-void StringClient::dequeueMessage(){
+void StringClient::dequeueMessage() {
     this->outgoingMessages.pop_front();
 }
 
