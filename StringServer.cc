@@ -24,7 +24,7 @@ void titleCase(string &str) {
 
     for (unsigned int i = 0; i < str.length(); i++) {
 
-        if (!isalpha(str[i])) {
+        if (isspace(str[i])) {
             titleCasedWord = false;
             continue;
         }
