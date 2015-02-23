@@ -1,0 +1,8 @@
+type "make" to create stringServer and stringClient executables
+
+or for building either one:
+"make stringClient"
+"make stringServer"
+
+cleaning:
+"make clean"

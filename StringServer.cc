@@ -15,6 +15,8 @@ using namespace std;
 StringServer* server; // the server
 
 void titleCase(string &str) {
+    if (str.empty()) return;
+
     bool titleCasedWord = false; // whether or not a word in the string has been title cased
 
     // Convert everything to lower case to begin
@@ -58,24 +60,15 @@ string getHostname() {
     return hostname_string;
 } // getHostname
 
-void StringServer::connectOrDie() {
-    // bind to host
-    if (bind(this->server_socketd, (struct sockaddr *) & (this->server_addr), sizeof(this->server_addr)) < 0) {
-        // binding failed
-        cerr << "ERROR while binding: " << strerror(errno) << endl;
-        exit(EXIT_FAILURE);
-    } // if
-}
+
 int main(int argc, char *argv[] ) {
 
     int server_socketd, client_socketd; // socket descriptors
     struct sockaddr_in server_addr; // address of the server
     struct sockaddr_in client_addr; // address of the connected client
     unsigned int client_addr_len;
-    fd_set readfds, activefds;
+    fd_set readfds;
     int select_rv; // return value from select call
-    int highest_fds; // highest socket descriptor in the set
-
 
     // setup server end socket
     server_socketd = socket(AF_INET, SOCK_STREAM, 0);
@@ -102,15 +95,11 @@ int main(int argc, char *argv[] ) {
 
     client_addr_len = sizeof(client_addr);
 
-    FD_ZERO(&activefds);
-    FD_SET(server_socketd, &activefds);
-    highest_fds = server_socketd;
-
     // keep server as an ongoing running service
     while (1) {
 
-        readfds = activefds;
-        select_rv = select(highest_fds + 1, &readfds, NULL, NULL, NULL);
+        readfds = server->getActiveFds();
+        select_rv = select(server->getHighestFds() + 1, &readfds, NULL, NULL, NULL);
 
         if (select_rv == -1) {
             cerr << "ERROR on select(): " << strerror(errno) << endl;
@@ -118,7 +107,7 @@ int main(int argc, char *argv[] ) {
         }
 
         // iterate through all sockets in the set to see which ones are ready
-        for (int connection = 0; connection <= highest_fds; connection++) {
+        for (int connection = 0; connection <= server->getHighestFds(); connection++) {
 
             if (!FD_ISSET(connection, &readfds)) continue;
 
@@ -128,16 +117,16 @@ int main(int argc, char *argv[] ) {
             if (connection == server_socketd) {
 
                 client_socketd = accept(server_socketd, (struct sockaddr*) &client_addr, &client_addr_len);
-                cout << client_socketd << " has connected" << endl; // TODO remove after
                 if (client_socketd < 0) {
                     cerr << "ERROR on accepting client: " << strerror(errno) << endl;
                 } else {
-                    FD_SET(client_socketd, &activefds);  // add new connection to set
-                    if (client_socketd > highest_fds) highest_fds = client_socketd;
+                    server->addToActiveFds(client_socketd); // add new connection to set
+                    if (client_socketd > server->getHighestFds()) server->setHighestFds(client_socketd);
                 }
             } else {
                 // connection is a client socket
-                string msg = server->readMessage(connection);
+                string msg;
+                if(server->readMessage(connection, msg) == 0) continue; // client disconnected
                 titleCase(msg);
                 server->sendMessage(connection, (char *)msg.c_str());
             }
@@ -147,18 +136,47 @@ int main(int argc, char *argv[] ) {
 } // main
 
 
+void StringServer::closeClient(int client_socketd) {
+    FD_CLR(client_socketd, &this->active_fds);
+    close(client_socketd);
+} // closeClient
+
+
+/**
+ * Get the server online
+ */
+void StringServer::connectOrDie() {
+    // bind to host
+    if (bind(this->server_socketd, (struct sockaddr *) & (this->server_addr), sizeof(this->server_addr)) < 0) {
+        // binding failed
+        cerr << "ERROR while binding: " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    } // if
+} // connectOrDie
+
+
 /**
  * Read a message from a client
+ * return:
+ *   -1 if error
+ *   0 if client disconnected
+ *   else good
  */
-string StringServer::readMessage(int client_socketd) {
+int StringServer::readMessage(int client_socketd, string &msg) {
+    int result; // retval of recv
     char text_size_str[4]; // first 4 bytes
     unsigned int text_size;
     stringstream ss; // to produe final result as a string
 
     // read text size (first 4 bytes)
-    if (read(client_socketd, &text_size_str, 4) < 0) {
+    result = recv(client_socketd, &text_size_str, 4, 0);
+    if (result == 0) {
+        this->closeClient(client_socketd);
+        return result;
+    }
+    if (result < 0) {
         cerr << "ERROR reading from client " << client_socketd << ": " << strerror(errno) << endl;
-        return ""; // TODO handle
+        return result;
     }
 
     text_size = strtol(text_size_str, NULL, 10);
@@ -166,18 +184,23 @@ string StringServer::readMessage(int client_socketd) {
     memset(text, 0, sizeof(text));
 
     // read the text
-    if (read(client_socketd, &text, sizeof(text)) < 0) {
+
+    result = recv(client_socketd, &text, sizeof(text), 0);
+    if (result == 0) {
+        this->closeClient(client_socketd);
+        return result;
+    }
+    if (result < 0) {
         cerr << "ERROR reading from client " << client_socketd << ": " << strerror(errno) << endl;
-        return ""; // TODO handle
+        return result;
     }
 
     for (unsigned int i = 0; i < text_size; i++) ss << text[i];
+    msg = ss.str();
 
-    cout << "Received from client " << client_socketd << ": " << ss.str() << endl;
-    return ss.str();
-
+    cout << "Client " << client_socketd << ": " << msg << endl;
+    return 1;
 } // readMessage
-
 
 
 
@@ -198,7 +221,7 @@ void StringServer::sendMessage(int client_socketd, char* response_msg) {
     strcpy(msg + 4, response_msg);
 
     // sending the message
-    if (write(client_socketd, msg, msg_size) < 0) {
+    if (send(client_socketd, msg, msg_size, 0) < 0) {
         cerr << "ERROR writing to client socket " << client_socketd << ": " << strerror(errno) << endl;
     }
 

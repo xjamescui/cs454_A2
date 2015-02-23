@@ -18,6 +18,7 @@ using namespace std;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // used for mutex purposes on threads
 StringClient *client; // the client
+bool eof = false; // whether or not EOF is reached
 
 
 /**
@@ -28,15 +29,14 @@ void *UserInput(void *args) {
     string line, reply; // input
 
     while(getline(cin, line)) {
-
         // add to the list of data we need to send to server
         pthread_mutex_lock(&mutex);
-        client->enqueueMessage(line);
+        if (!line.empty()) client->enqueueMessage(line);
         pthread_mutex_unlock(&mutex);
-
     } // while
-} // UserInput
 
+    eof = true;
+} // UserInput
 
 
 
@@ -51,6 +51,7 @@ void *ServerInteraction(void *socket) {
     while (1) {
         while (client->queueCount() > 0) {
 
+            if (eof) break;
             // send client message in queue
             msg = client->nextMessage();
 
@@ -59,13 +60,17 @@ void *ServerInteraction(void *socket) {
             pthread_mutex_unlock(&mutex);
 
             client->sendMessage(socketd, (char*)msg.c_str());
-            reply = client->readMessage(socketd);
+            client->readMessage(socketd, reply);
 
             cout << "Server: " << reply << endl;
 
             sleep(2); // 2 second delay between successive requests
         } // while
+
+        if (eof) break;
     } // while
+
+    close(socketd);
 } // ServerInteraction
 
 
@@ -74,6 +79,7 @@ int main(int argc, char *argv[]) {
 
     int socketd, port;
     struct hostent *server;
+    pthread_t stdin_thread, backend_thread;
 
     // create socket
     socketd = socket(AF_INET, SOCK_STREAM, 0);
@@ -104,8 +110,6 @@ int main(int argc, char *argv[]) {
 
     // connected!
 
-    pthread_t stdin_thread, backend_thread;
-
     // create stdin_thread to handle user input
     if (pthread_create(&stdin_thread, NULL, UserInput, NULL)) {
         cerr << "ERROR creating thread to handle user input" << endl;
@@ -124,7 +128,6 @@ int main(int argc, char *argv[]) {
 
 
 
-
 StringClient::StringClient(hostent *server, int port) : port(port) {
 
     memset(&(this->serv_addr), 0, sizeof(this->serv_addr));
@@ -139,7 +142,7 @@ StringClient::StringClient(hostent *server, int port) : port(port) {
 void StringClient::connectOrDie(int socketd) {
     if(connect(socketd, (struct sockaddr*)&(this->serv_addr), sizeof(this->serv_addr)) < 0 ) {
         cerr << "ERROR connecting to socket=" << socketd << " : " << strerror(errno) << endl;
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 } // connectOrDie
 
@@ -164,7 +167,7 @@ void StringClient::sendMessage(int socketd, char* client_msg) {
     strcpy(msg + 4, client_msg);
 
     // sending the message
-    if (write(socketd, msg, msg_size) < 0) {
+    if (send(socketd, msg, msg_size, 0) < 0) {
         cerr << "ERROR writing to socket " << socketd << ": " << strerror(errno) << endl;
     }
 
@@ -176,29 +179,29 @@ void StringClient::sendMessage(int socketd, char* client_msg) {
 /**
  * Get message/reply from server through socket identified by socketd
  */
-string StringClient::readMessage(int socketd) {
+void StringClient::readMessage(int socketd, string &reply) {
     char text_size_str[4]; // first 4 bytes
     unsigned int text_size;
     stringstream ss; // to produe final result as a string
 
     // read text size (first 4 bytes)
-    if (read(socketd, &text_size_str, 4) < 0) {
+    if (recv(socketd, &text_size_str, 4, 0) < 0) {
         cerr << "ERROR reading from server socket" << socketd << ": " << strerror(errno) << endl;
-        return ""; // TODO handle
+        return;
     }
 
     text_size = strtol(text_size_str, NULL, 10);
     char text[text_size];
     memset(text, 0, sizeof(text));
 
-    if (read(socketd, &text, sizeof(text)) < 0 ) {
+    if (recv(socketd, &text, sizeof(text), 0) < 0 ) {
         cerr << "ERROR reading from socket " << socketd << ": " << strerror(errno) << endl;
-        return ""; // TODO handle
+        return;
     } // if
 
     for (unsigned int i = 0; i < text_size; i++) ss << text[i];
 
-    return ss.str();
+    reply = ss.str();
 } // getMessage
 
 
