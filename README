@@ -1,4 +1,4 @@
-type "make" to create stringServer and stringClient executables
+Run "make" to create stringServer and stringClient executables
 
 or for building either one:
 "make stringClient"
