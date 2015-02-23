@@ -198,7 +198,7 @@ int StringServer::readMessage(int client_socketd, string &msg) {
     for (unsigned int i = 0; i < text_size; i++) ss << text[i];
     msg = ss.str();
 
-    cout << "Client " << client_socketd << ": " << msg << endl;
+    cout << msg << endl; // print out the string received from client
     return 1;
 } // readMessage
 
