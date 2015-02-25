@@ -43,7 +43,7 @@ int getPort(int socketd, struct sockaddr_in server_addr) {
 
     unsigned int len = sizeof(server_addr);
     if (getsockname(socketd, (struct sockaddr*)&server_addr, &len) == -1) {
-        cerr << "ERROR getsockname for socket=" << socketd << endl;
+        cout << "ERROR getsockname for socket=" << socketd << endl;
         exit(1);
     }
     return ntohs(server_addr.sin_port);
@@ -74,7 +74,7 @@ int main(int argc, char *argv[] ) {
     server_socketd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server_socketd < 0) {
-        cerr << "ERROR opening socket" << endl;
+        cout << "ERROR opening socket" << endl;
         exit(1);
     } // if
 
@@ -102,7 +102,7 @@ int main(int argc, char *argv[] ) {
         select_rv = select(server->getHighestFds() + 1, &readfds, NULL, NULL, NULL);
 
         if (select_rv == -1) {
-            cerr << "ERROR on select(): " << strerror(errno) << endl;
+            cout << "ERROR on select(): " << strerror(errno) << endl;
             exit(EXIT_FAILURE);
         }
 
@@ -118,7 +118,7 @@ int main(int argc, char *argv[] ) {
 
                 client_socketd = accept(server_socketd, (struct sockaddr*) &client_addr, &client_addr_len);
                 if (client_socketd < 0) {
-                    cerr << "ERROR on accepting client: " << strerror(errno) << endl;
+                    cout << "ERROR on accepting client: " << strerror(errno) << endl;
                 } else {
                     server->addToActiveFds(client_socketd); // add new connection to set
                     if (client_socketd > server->getHighestFds()) server->setHighestFds(client_socketd);
@@ -150,7 +150,7 @@ void StringServer::connectOrDie() {
     // bind to host
     if (bind(this->server_socketd, (struct sockaddr *) & (this->server_addr), sizeof(this->server_addr)) < 0) {
         // binding failed
-        cerr << "ERROR while binding: " << strerror(errno) << endl;
+        cout << "ERROR while binding: " << strerror(errno) << endl;
         exit(EXIT_FAILURE);
     } // if
 } // connectOrDie
@@ -212,7 +212,7 @@ int StringServer::readMessage(int client_socketd, string &msg) {
         return result;
     }
     if (result < 0) {
-        cerr << "ERROR reading from client " << client_socketd << ": " << strerror(errno) << endl;
+        cout << "ERROR reading from client " << client_socketd << ": " << strerror(errno) << endl;
         return result;
     }
 
@@ -231,7 +231,7 @@ int StringServer::readMessage(int client_socketd, string &msg) {
         }
 
         if (text_recv < 0) {
-            cerr << "ERROR reading from client " << client_socketd << ": " << strerror(errno) << endl;
+            cout << "ERROR reading from client " << client_socketd << ": " << strerror(errno) << endl;
             return text_recv;
         }
 
@@ -271,7 +271,7 @@ void StringServer::sendMessage(int client_socketd, char* response_msg) {
 
         bytes_out = send(client_socketd, msg + total_bytes_out, bytes_left, 0);
         if (bytes_out < 0) {
-            cerr << "ERROR writing to client socket " << client_socketd << ": " << strerror(errno) << endl;
+            cout << "ERROR writing to client socket " << client_socketd << ": " << strerror(errno) << endl;
             break;
         }
         total_bytes_out += bytes_out;

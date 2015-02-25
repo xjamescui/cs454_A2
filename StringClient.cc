@@ -86,12 +86,12 @@ int main(int argc, char *argv[]) {
     socketd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (socketd < 0) {
-        cerr << "ERROR creating a socket on client side, socket is " << socketd << endl;
+        cout << "ERROR creating a socket on client side, socket is " << socketd << endl;
         exit(1);
     }
 
     if (getenv("SERVER_ADDRESS") == NULL || getenv("SERVER_PORT") == NULL) {
-        cerr << "Please ensure SERVER_ADDRESS and SERVER_PORT environment variables are set" << endl;
+        cout << "Please ensure SERVER_ADDRESS and SERVER_PORT environment variables are set" << endl;
         exit(1);
     }
 
@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
     server = gethostbyname(host_name.c_str());
 
     if (server == NULL) {
-        cerr << "ERROR getting the server with name " << host_name << endl;
+        cout << "ERROR getting the server with name " << host_name << endl;
         exit(0);
     }
 
@@ -113,13 +113,13 @@ int main(int argc, char *argv[]) {
 
     // create stdin_thread to handle user input
     if (pthread_create(&stdin_thread, NULL, UserInput, NULL)) {
-        cerr << "ERROR creating thread to handle user input" << endl;
+        cout << "ERROR creating thread to handle user input" << endl;
         exit(EXIT_FAILURE);
     }
 
     // create backend_thread to handle request sending to server
     if (pthread_create(&backend_thread, NULL, ServerInteraction, (void *)&socketd)) {
-        cerr << "ERROR creating thread to handle backend" << endl;
+        cout << "ERROR creating thread to handle backend" << endl;
         exit(EXIT_FAILURE);
     }
 
@@ -142,7 +142,7 @@ StringClient::StringClient(hostent *server, int port) : port(port) {
 
 void StringClient::connectOrDie(int socketd) {
     if(connect(socketd, (struct sockaddr*)&(this->serv_addr), sizeof(this->serv_addr)) < 0 ) {
-        cerr << "ERROR connecting to socket " << socketd << " : " << strerror(errno) << endl;
+        cout << "ERROR connecting to socket " << socketd << " : " << strerror(errno) << endl;
         exit(EXIT_FAILURE);
     }
 } // connectOrDie
@@ -204,7 +204,7 @@ void StringClient::sendMessage(int socketd, char* client_msg) {
 
         bytes_out = send(socketd, msg + total_bytes_out, bytes_left, 0);
         if (bytes_out < 0) {
-            cerr << "ERROR writing to socket " << socketd << ": " << strerror(errno) << endl;
+            cout << "ERROR writing to socket " << socketd << ": " << strerror(errno) << endl;
             break;
         }
         total_bytes_out += bytes_out;
@@ -229,7 +229,7 @@ void StringClient::readMessage(int socketd, string &reply) {
 
     // read text size (first 4 bytes)
     if (recv(socketd, &text_size_str, 4, 0) < 0) {
-        cerr << "ERROR reading from server socket" << socketd << ": " << strerror(errno) << endl;
+        cout << "ERROR reading from server socket" << socketd << ": " << strerror(errno) << endl;
         return;
     }
 
@@ -243,7 +243,7 @@ void StringClient::readMessage(int socketd, string &reply) {
 
         text_recv = recv(socketd, &text[total_text_recv], text_left, 0);
         if (text_recv < 0) {
-            cerr << "ERROR reading from socket " << socketd << ": " << strerror(errno) << endl;
+            cout << "ERROR reading from socket " << socketd << ": " << strerror(errno) << endl;
             return;
         } // if
 
