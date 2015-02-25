@@ -46,7 +46,7 @@ void *UserInput(void *args) {
 void *ServerInteraction(void *socket) {
 
     string msg, reply;
-    int socketd = (int)*((int*)socket);
+    long socketd = (long)socket;
 
     while (1) {
         while (client->queueCount() > 0) {
@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
     }
 
     // create backend_thread to handle request sending to server
-    if (pthread_create(&backend_thread, NULL, ServerInteraction, (void *)&socketd)) {
+    if (pthread_create(&backend_thread, NULL, ServerInteraction, (void *)(long)socketd)) {
         cout << "ERROR creating thread to handle backend" << endl;
         exit(EXIT_FAILURE);
     }
