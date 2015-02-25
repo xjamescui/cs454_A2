@@ -36,6 +36,7 @@ void *UserInput(void *args) {
     } // while
 
     eof = true;
+    return NULL;
 } // UserInput
 
 
@@ -72,6 +73,7 @@ void *ServerInteraction(void *socket) {
     } // while
 
     close(socketd);
+    return NULL;
 } // ServerInteraction
 
 
