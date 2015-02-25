@@ -171,20 +171,19 @@ void packInt(unsigned char *msg, unsigned long int i) {
  * Unpack a 4 byte integer from the beginning of a message char buffer
  * extracted and modified from: http://beej.us/guide/bgnet/examples/pack2.c
  */
-long int unpackInt(unsigned char *msg) {
+long int unpackInt(unsigned char *msg)
+{
     // recreate the integer by bitwise or the first 4 bytes after applying corresponding bit shifts
     unsigned long int unsigned_int = ((unsigned long int) msg[0]<<24)
-                                     | ((unsigned long int)msg[1]<<16)
-                                     | ((unsigned long int)msg[2]<<8)
-                                     | msg[3];
+        | ((unsigned long int)msg[1]<<16) 
+        | ((unsigned long int)msg[2]<<8) 
+        | msg[3];
 
     long int i;
 
     // change from unsigned to signed
-    if (unsigned_int <= 0x7fffffffu) i = unsigned_int;
-    else {
-        i = -1 - (long int)(0xffffffffu - unsigned_int);
-    }
+    if (unsigned_int <= 0x7fffffffu) i = unsigned_int; 
+    else { i = -1 - (long int)(0xffffffffu - unsigned_int); }
 
     return i;
 }
@@ -270,7 +269,7 @@ void StringServer::sendMessage(int client_socketd, char* response_msg) {
     while (total_bytes_out < msg_size) {
 
         bytes_out = send(client_socketd, msg + total_bytes_out, bytes_left, 0);
-        if (bytes_out < 0) {
+        if (bytes_out < 0){
             cerr << "ERROR writing to client socket " << client_socketd << ": " << strerror(errno) << endl;
             break;
         }
